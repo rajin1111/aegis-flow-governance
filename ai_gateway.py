@@ -8,6 +8,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 class AegisAIGateway:
+    # Aufpassen tenat wird geschluckt muss fixe pronto!!!!!
     def __init__(self, tenant_id: str):
         self.tenant_id = tenant_id
         self.primary_region = os.getenv("AWS_REGION", "us-east-1")
@@ -44,7 +45,8 @@ class AegisAIGateway:
         Nutzt Bedrock Guardrails direkt im Aufruf, um DLP/PII ohne TTFT-Verlust zu prüfen.
         """
         body = self._build_payload(user_prompt)
-        
+        # ACHTUNG:
+        # DRAFT im Produktiv-Betrieb?Darf nicht sein bitte tun noch ändere love:)
         invoke_params = {
             "modelId": self.model_id,
             "body": body
@@ -90,6 +92,8 @@ class AegisAIGateway:
         event_stream = self.process_and_stream_prompt(user_prompt)
         
         for event in event_stream:
+            #Buged:
+            # Wenn Bedrock mittendrin abbricht oder ein Error-Event in den Stream wirft,wird das hier einfach ignoriert statt sauber abgebrochen.
             chunk = event.get("chunk")
             if chunk:
                 chunk_json = json.loads(chunk.get("bytes").decode("utf-8"))
@@ -142,7 +146,7 @@ def lambda_handler(event, context):
                 "completion": collected_response
             })
         }
-
+#
     except Exception as e:
         logger.error(f"Internal Handler Error: {str(e)}")
         return {
