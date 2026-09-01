@@ -8,13 +8,13 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 class AegisAIGateway:
-    # Aufpassen tenat wird geschluckt muss fixe pronto!!!!!
+    # Watch out tenant is accepted blindly must fix pronto!!!!!
     def __init__(self, tenant_id: str):
         self.tenant_id = tenant_id
         self.primary_region = os.getenv("AWS_REGION", "us-east-1")
         self.fallback_region = os.getenv("FALLBACK_REGION", "eu-west-1")
         
-        # Standard: Cross-Region Inference Profile ID für Claude 3.5 Sonnet
+        # Default: Cross-Region Inference Profile ID for Claude 3.5 Sonnet
         self.model_id = os.getenv(
             "AI_MODEL_ID", 
             "us.anthropic.claude-3-5-sonnet-20240620-v1:0"
@@ -41,18 +41,18 @@ class AegisAIGateway:
 
     def process_and_stream_prompt(self, user_prompt: str):
         """
-        Führt den Aufruf mit Response-Stream durch. 
-        Nutzt Bedrock Guardrails direkt im Aufruf, um DLP/PII ohne TTFT-Verlust zu prüfen.
+        Executes the invocation with response stream.
+        Uses Bedrock Guardrails directly in the invocation to check DLP/PII without TTFT penalty.
         """
         body = self._build_payload(user_prompt)
-        # ACHTUNG:
-        # DRAFT im Produktiv-Betrieb?Darf nicht sein bitte tun noch ändere love:)
+        # WARNING:
+        # DRAFT in production? Cannot be please change this love:)
         invoke_params = {
             "modelId": self.model_id,
             "body": body
         }
 
-        # Guardrails prüfen PII & Prompt-Injection direkt im Bedrock-Stream
+        # Guardrails inspect PII & prompt injection directly in the Bedrock stream
         if self.guardrail_id:
             invoke_params["guardrailIdentifier"] = self.guardrail_id
             invoke_params["guardrailVersion"] = self.guardrail_version
@@ -66,7 +66,7 @@ class AegisAIGateway:
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code")
             
-            # Automatischer Failover bei Throttling (429 / ThrottlingException)
+            # Automatic failover on throttling (429 / ThrottlingException)
             if error_code in ["ThrottlingException", "TooManyRequestsException"]:
                 logger.warning(f"Throttling in {self.primary_region} for tenant {self.tenant_id}. Triggering fallback to {self.fallback_region}...")
                 return self._trigger_cross_region_fallback(invoke_params)
@@ -76,7 +76,7 @@ class AegisAIGateway:
 
     def _trigger_cross_region_fallback(self, invoke_params: dict):
         """
-        Stateful Fallback Client auf die sekundäre AWS Region.
+        Stateful fallback client targeting the secondary AWS region.
         """
         fallback_client = boto3.client(
             service_name="bedrock-runtime",
@@ -87,18 +87,18 @@ class AegisAIGateway:
 
     def generate_text_stream(self, user_prompt: str):
         """
-        Generator, der die Chunks aus dem Bedrock EventStream ausliest und Chunks als Text liefert.
+        Generator that reads chunks from the Bedrock EventStream and yields chunks as text.
         """
         event_stream = self.process_and_stream_prompt(user_prompt)
         
         for event in event_stream:
-            #Buged:
-            # Wenn Bedrock mittendrin abbricht oder ein Error-Event in den Stream wirft,wird das hier einfach ignoriert statt sauber abgebrochen.
+            # Bugged:
+            # If Bedrock breaks in the middle or pushes an error event into the stream, this is simply ignored instead of being terminated cleanly.
             chunk = event.get("chunk")
             if chunk:
                 chunk_json = json.loads(chunk.get("bytes").decode("utf-8"))
                 
-                # Claude 3 Streaming Format
+                # Claude 3 streaming format
                 if chunk_json.get("type") == "content_block_delta":
                     delta = chunk_json.get("delta", {})
                     if delta.get("type") == "text_delta":
@@ -107,11 +107,11 @@ class AegisAIGateway:
 
 def lambda_handler(event, context):
     """
-    AWS Lambda Einstiegspunkt.
-    Liest Payload und Mandanten-Header aus und führt den Gateway-Aufruf durch.
+    AWS Lambda entry point.
+    Extracts payload and tenant headers, then executes the gateway invocation.
     """
     try:
-        # Extraktion von Headers und Payload
+        # Extraction of headers and payload
         headers = event.get("headers", {}) or {}
         tenant_id = headers.get("x-tenant-id", "tenant-default")
 
@@ -131,8 +131,8 @@ def lambda_handler(event, context):
 
         gateway = AegisAIGateway(tenant_id=tenant_id)
         
-        # Vollständige Antwort aggregieren (für Standard-REST-Aufrufe)
-        # Wenn Lambda Function URL Response Streaming genutzt wird, kann der Stream direkt iteriert werden.
+        # Aggregate complete response (for standard REST invocations)
+        # If Lambda Function URL response streaming is used, the stream can be iterated directly.
         collected_response = "".join(list(gateway.generate_text_stream(user_prompt)))
 
         return {
